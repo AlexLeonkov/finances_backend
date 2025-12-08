@@ -1,8 +1,12 @@
 import express, { Request, Response } from 'express';
+import cors from 'cors';
 import { prisma } from './prisma';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Enable CORS for all origins (development mode)
+app.use(cors());
 
 app.use(express.json());
 
@@ -52,9 +56,10 @@ app.post('/operations', async (req: Request, res: Response) => {
     if (fuelCost === undefined || typeof fuelCost !== 'number') {
       return res.status(400).json({ error: 'Invalid fuelCost' });
     }
-    if (isPaid === undefined || typeof isPaid !== 'boolean') {
-      return res.status(400).json({ error: 'Invalid isPaid' });
-    }
+    // isPaid is optional or handled with default false in logic if undefined, 
+    // but here strict check. Let's make it robust:
+    const finalIsPaid = typeof isPaid === 'boolean' ? isPaid : false;
+    
     if (profit === undefined || typeof profit !== 'number') {
       return res.status(400).json({ error: 'Invalid profit' });
     }
@@ -68,7 +73,7 @@ app.post('/operations', async (req: Request, res: Response) => {
         revenue,
         materialCost: materialCost || null, // Optional
         fuelCost,
-        isPaid,
+        isPaid: finalIsPaid,
         profit,
       },
     });
