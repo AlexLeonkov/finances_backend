@@ -5,14 +5,19 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Operation {
   id        Int      @id @default(autoincrement())
-  name      String
+  invoiceNumber      String?
   team      String?
+  members   String?
   date      DateTime
   revenue   Float
+  materialCost Float?
+  fuelCost Float?
+  isPaid Boolean?
   profit    Float
   createdAt DateTime @default(now())
 }
