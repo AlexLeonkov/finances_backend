@@ -10,6 +10,76 @@ app.use(cors());
 
 app.use(express.json());
 
+// GET /dashboard - Aggregate stats (optionally filtered by date)
+app.get('/dashboard', async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    // Build date filter
+    const where: any = {};
+    if (startDate || endDate) {
+      where.date = {};
+      if (startDate) where.date.gte = new Date(startDate as string);
+      if (endDate) where.date.lte = new Date(endDate as string);
+    }
+
+    // 1. Get total stats
+    const totalStats = await prisma.operation.aggregate({
+      where,
+      _sum: {
+        revenue: true,
+        profit: true,
+        fuelCost: true,
+        materialCost: true,
+      },
+      _count: {
+        id: true,
+      },
+    });
+
+    // 2. Get stats grouped by team
+    const teamStats = await prisma.operation.groupBy({
+      by: ['team'],
+      where,
+      _sum: {
+        revenue: true,
+        profit: true,
+      },
+      _count: {
+        id: true,
+      },
+      orderBy: {
+        _sum: {
+          revenue: 'desc',
+        },
+      },
+    });
+
+    res.json({
+      period: {
+        start: startDate || 'all-time',
+        end: endDate || 'now',
+      },
+      totals: {
+        operations: totalStats._count.id,
+        revenue: totalStats._sum.revenue || 0,
+        profit: totalStats._sum.profit || 0,
+        expenses: (totalStats._sum.fuelCost || 0) + (totalStats._sum.materialCost || 0),
+      },
+      teams: teamStats.map(t => ({
+        name: t.team || 'Unknown',
+        operations: t._count.id,
+        revenue: t._sum.revenue || 0,
+        profit: t._sum.profit || 0,
+      })),
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /operations - List all operations ordered by date desc
 app.get('/operations', async (req: Request, res: Response) => {
   try {
