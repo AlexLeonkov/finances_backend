@@ -32,7 +32,8 @@ app.get('/dashboard', async (req: Request, res: Response) => {
         profit: true,
         fuelCost: true,
         materialCost: true,
-      },
+        paymentAmount: true,
+      } as any,
       _count: {
         id: true,
       },
@@ -45,7 +46,8 @@ app.get('/dashboard', async (req: Request, res: Response) => {
       _sum: {
         revenue: true,
         profit: true,
-      },
+        paymentAmount: true,
+      } as any,
       _count: {
         id: true,
       },
@@ -58,7 +60,7 @@ app.get('/dashboard', async (req: Request, res: Response) => {
 
     // 3. Daily Profit (Group by day)
     // Fetch relevant fields to aggregate in memory to ensure correct daily grouping
-    const dailyOperations = await prisma.operation.findMany({
+    const dailyOperations: any[] = await prisma.operation.findMany({
       where,
       select: {
         date: true,
@@ -66,8 +68,9 @@ app.get('/dashboard', async (req: Request, res: Response) => {
         revenue: true,
         fuelCost: true,
         materialCost: true,
+        paymentAmount: true,
         id: true,
-      },
+      } as any,
       orderBy: { date: 'asc' },
     });
 
@@ -77,6 +80,7 @@ app.get('/dashboard', async (req: Request, res: Response) => {
       revenue: number;
       expenses: number;
       operations: number;
+      salary: number;
     }>();
 
     for (const op of dailyOperations) {
@@ -87,11 +91,13 @@ app.get('/dashboard', async (req: Request, res: Response) => {
         revenue: 0,
         expenses: 0,
         operations: 0,
+        salary: 0,
       };
 
       existing.profit += op.profit;
       existing.revenue += op.revenue;
       existing.expenses += (op.fuelCost || 0) + (op.materialCost || 0);
+      existing.salary += (op.paymentAmount || 0);
       existing.operations += 1;
 
       dailyProfitMap.set(day, existing);
@@ -107,7 +113,8 @@ app.get('/dashboard', async (req: Request, res: Response) => {
         profit: true,
         fuelCost: true,
         materialCost: true,
-      },
+        paymentAmount: true,
+      } as any,
       _count: {
         id: true,
       },
@@ -116,12 +123,14 @@ app.get('/dashboard', async (req: Request, res: Response) => {
     const typeBreakdown = typeStats.map((t: any) => {
       const revenue = t._sum?.revenue || 0;
       const profit = t._sum?.profit || 0;
+      const salary = t._sum?.paymentAmount || 0;
       return {
         type: t.projectType || 'Unknown',
         fuelCost: t._sum?.fuelCost || 0,
         materialCost: t._sum?.materialCost || 0,
         revenue,
         profit,
+        salary,
         profitPct: revenue > 0 ? Number((profit / revenue).toFixed(2)) : 0,
         operations: t._count?.id || 0
       };
@@ -134,7 +143,8 @@ app.get('/dashboard', async (req: Request, res: Response) => {
       _sum: {
         revenue: true,
         profit: true,
-      },
+        paymentAmount: true,
+      } as any,
       _count: {
         id: true,
       },
@@ -143,11 +153,13 @@ app.get('/dashboard', async (req: Request, res: Response) => {
     const teamTypePerformance = teamTypeStats.map((tt: any) => {
       const revenue = tt._sum?.revenue || 0;
       const profit = tt._sum?.profit || 0;
+      const salary = tt._sum?.paymentAmount || 0;
       return {
         team: tt.team || 'Unknown',
         type: tt.projectType || 'Unknown',
         revenue,
         profit,
+        salary,
         profitPct: revenue > 0 ? Number((profit / revenue).toFixed(2)) : 0,
         operations: tt._count?.id || 0
       };
@@ -157,7 +169,8 @@ app.get('/dashboard', async (req: Request, res: Response) => {
     const marginByTypeTeams = teamTypePerformance.map(tt => ({
       type: tt.type,
       team: tt.team,
-      profit: tt.profit
+      profit: tt.profit,
+      salary: tt.salary
     }));
 
     res.json({
@@ -166,16 +179,18 @@ app.get('/dashboard', async (req: Request, res: Response) => {
         end: endDate || 'now',
       },
       totals: {
-        operations: totalStats._count.id,
-        revenue: totalStats._sum.revenue || 0,
-        profit: totalStats._sum.profit || 0,
-        expenses: (totalStats._sum.fuelCost || 0) + (totalStats._sum.materialCost || 0),
+        operations: totalStats._count?.id || 0,
+        revenue: totalStats._sum?.revenue || 0,
+        profit: totalStats._sum?.profit || 0,
+        expenses: (totalStats._sum?.fuelCost || 0) + (totalStats._sum?.materialCost || 0),
+        salary: totalStats._sum?.paymentAmount || 0,
       },
       teams: teamStats.map(t => ({
         name: t.team || 'Unknown',
-        operations: t._count.id,
-        revenue: t._sum.revenue || 0,
-        profit: t._sum.profit || 0,
+        operations: t._count?.id || 0,
+        revenue: t._sum?.revenue || 0,
+        profit: t._sum?.profit || 0,
+        salary: t._sum?.paymentAmount || 0,
       })),
       dailyProfit,
       typeBreakdown,
