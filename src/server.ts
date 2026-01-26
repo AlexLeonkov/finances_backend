@@ -60,7 +60,7 @@ app.get('/dashboard', async (req: Request, res: Response) => {
 
     // 3. Daily Profit (Group by day)
     // Fetch relevant fields to aggregate in memory to ensure correct daily grouping
-    const dailyOperations: any[] = await prisma.operation.findMany({
+    const dailyOperations = await prisma.operation.findMany({
       where,
       select: {
         date: true,
@@ -83,8 +83,8 @@ app.get('/dashboard', async (req: Request, res: Response) => {
       salary: number;
     }>();
 
-    for (const op of dailyOperations) {
-      const day = op.date.toISOString().split('T')[0];
+    for (const op of (dailyOperations as any[])) {
+      const day = (op.date as Date).toISOString().split('T')[0];
       const existing = dailyProfitMap.get(day) || {
         date: day,
         profit: 0,
