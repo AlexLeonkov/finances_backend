@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
+import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
 
 const app = express();
@@ -55,6 +56,110 @@ app.get('/dashboard', async (req: Request, res: Response) => {
       },
     });
 
+    // 3. Daily Profit (Group by day)
+    // Fetch relevant fields to aggregate in memory to ensure correct daily grouping
+    const dailyOperations = await prisma.operation.findMany({
+      where,
+      select: {
+        date: true,
+        profit: true,
+        revenue: true,
+        fuelCost: true,
+        materialCost: true,
+        id: true,
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    const dailyProfitMap = new Map<string, {
+      date: string;
+      profit: number;
+      revenue: number;
+      expenses: number;
+      operations: number;
+    }>();
+
+    for (const op of dailyOperations) {
+      const day = op.date.toISOString().split('T')[0];
+      const existing = dailyProfitMap.get(day) || {
+        date: day,
+        profit: 0,
+        revenue: 0,
+        expenses: 0,
+        operations: 0,
+      };
+
+      existing.profit += op.profit;
+      existing.revenue += op.revenue;
+      existing.expenses += (op.fuelCost || 0) + (op.materialCost || 0);
+      existing.operations += 1;
+
+      dailyProfitMap.set(day, existing);
+    }
+    const dailyProfit = Array.from(dailyProfitMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+    // 4. Breakdown by project type
+    const typeStats = await prisma.operation.groupBy({
+      by: ['projectType'] as any,
+      where,
+      _sum: {
+        revenue: true,
+        profit: true,
+        fuelCost: true,
+        materialCost: true,
+      },
+      _count: {
+        id: true,
+      },
+    });
+
+    const typeBreakdown = typeStats.map((t: any) => {
+      const revenue = t._sum?.revenue || 0;
+      const profit = t._sum?.profit || 0;
+      return {
+        type: t.projectType || 'Unknown',
+        fuelCost: t._sum?.fuelCost || 0,
+        materialCost: t._sum?.materialCost || 0,
+        revenue,
+        profit,
+        profitPct: revenue > 0 ? Number((profit / revenue).toFixed(2)) : 0,
+        operations: t._count?.id || 0
+      };
+    });
+
+    // 5. Team vs Type performance
+    const teamTypeStats = await prisma.operation.groupBy({
+      by: ['team', 'projectType'] as any,
+      where,
+      _sum: {
+        revenue: true,
+        profit: true,
+      },
+      _count: {
+        id: true,
+      },
+    });
+
+    const teamTypePerformance = teamTypeStats.map((tt: any) => {
+      const revenue = tt._sum?.revenue || 0;
+      const profit = tt._sum?.profit || 0;
+      return {
+        team: tt.team || 'Unknown',
+        type: tt.projectType || 'Unknown',
+        revenue,
+        profit,
+        profitPct: revenue > 0 ? Number((profit / revenue).toFixed(2)) : 0,
+        operations: tt._count?.id || 0
+      };
+    });
+
+    // 6. Margin by type + team (derived)
+    const marginByTypeTeams = teamTypePerformance.map(tt => ({
+      type: tt.type,
+      team: tt.team,
+      profit: tt.profit
+    }));
+
     res.json({
       period: {
         start: startDate || 'all-time',
@@ -72,6 +177,10 @@ app.get('/dashboard', async (req: Request, res: Response) => {
         revenue: t._sum.revenue || 0,
         profit: t._sum.profit || 0,
       })),
+      dailyProfit,
+      typeBreakdown,
+      teamTypePerformance,
+      marginByTypeTeams,
     });
 
   } catch (error) {
@@ -95,65 +204,68 @@ app.get('/operations', async (req: Request, res: Response) => {
   }
 });
 
-// POST /operations - Create a new operation
-app.post('/operations', async (req: Request, res: Response) => {
-  try {
-    const { 
-      invoiceNumber, 
-      team, 
-      members, 
-      date, 
-      revenue, 
-      materialCost, 
-      fuelCost, 
-      isPaid, 
-      profit 
-    } = req.body;
+// // POST /operations - Create a new operation
+// app.post('/operations', async (req: Request, res: Response) => {
+//   try {
+//     const { 
+//       invoiceNumber, 
+//       team, 
+//       members, 
+//       date, 
+//       revenue, 
+//       materialCost, 
+//       fuelCost, 
+//       isPaid, 
+//       profit,
+//       projectType, // Accept camelCase
+//       project_type // or snake_case
+//     } = req.body;
 
-    // Simple validation (checking required fields)
-    if (!invoiceNumber || typeof invoiceNumber !== 'string') {
-      return res.status(400).json({ error: 'Invalid invoiceNumber' });
-    }
-    if (!members || typeof members !== 'string') {
-      return res.status(400).json({ error: 'Invalid members' });
-    }
-    if (!date || typeof date !== 'string') {
-      return res.status(400).json({ error: 'Invalid date (expecting ISO string)' });
-    }
-    if (revenue === undefined || typeof revenue !== 'number') {
-      return res.status(400).json({ error: 'Invalid revenue' });
-    }
-    if (fuelCost === undefined || typeof fuelCost !== 'number') {
-      return res.status(400).json({ error: 'Invalid fuelCost' });
-    }
-    // isPaid is optional or handled with default false in logic if undefined, 
-    // but here strict check. Let's make it robust:
-    const finalIsPaid = typeof isPaid === 'boolean' ? isPaid : false;
+//     // Simple validation (checking required fields)
+//     if (!invoiceNumber || typeof invoiceNumber !== 'string') {
+//       return res.status(400).json({ error: 'Invalid invoiceNumber' });
+//     }
+//     if (!members || typeof members !== 'string') {
+//       return res.status(400).json({ error: 'Invalid members' });
+//     }
+//     if (!date || typeof date !== 'string') {
+//       return res.status(400).json({ error: 'Invalid date (expecting ISO string)' });
+//     }
+//     if (revenue === undefined || typeof revenue !== 'number') {
+//       return res.status(400).json({ error: 'Invalid revenue' });
+//     }
+//     if (fuelCost === undefined || typeof fuelCost !== 'number') {
+//       return res.status(400).json({ error: 'Invalid fuelCost' });
+//     }
+//     // isPaid is optional or handled with default false in logic if undefined, 
+//     // but here strict check. Let's make it robust:
+//     const finalIsPaid = typeof isPaid === 'boolean' ? isPaid : false;
     
-    if (profit === undefined || typeof profit !== 'number') {
-      return res.status(400).json({ error: 'Invalid profit' });
-    }
+//     if (profit === undefined || typeof profit !== 'number') {
+//       return res.status(400).json({ error: 'Invalid profit' });
+//     }
 
-    const newOperation = await prisma.operation.create({
-      data: {
-        invoiceNumber,
-        team: team || null,
-        members,
-        date: new Date(date),
-        revenue,
-        materialCost: materialCost || null, // Optional
-        fuelCost,
-        isPaid: finalIsPaid,
-        profit,
-      },
-    });
+//     const newOperation = await prisma.operation.create({
+//       data: {
+//         invoiceNumber,
+//         team: team || null,
+//         members,
+//         date: new Date(date),
+//         revenue,
+//         materialCost: materialCost || null, // Optional
+//         fuelCost,
+//         isPaid: finalIsPaid,
+//         profit,
+//         projectType: projectType || project_type || null,
+//       } as Prisma.OperationCreateInput,
+//     });
 
-    res.status(201).json(newOperation);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+//     res.status(201).json(newOperation);
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ error: 'Internal server error' });
+//   }
+// });
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

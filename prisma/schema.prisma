@@ -19,5 +19,6 @@ model Operation {
   fuelCost Float?
   isPaid Boolean?
   profit    Float
+  projectType String? @map("project_type")
   createdAt DateTime @default(now())
 }
