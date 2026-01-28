@@ -11,6 +11,30 @@ app.use(cors());
 
 app.use(express.json());
 
+const serializeDecimal = (value: unknown) => {
+  if (value instanceof Prisma.Decimal) {
+    return value.toString();
+  }
+  return value;
+};
+
+const serializeLedgerRow = (row: any) => ({
+  ...row,
+  openingBalance: serializeDecimal(row.openingBalance),
+  incomeInvoices: serializeDecimal(row.incomeInvoices),
+  incomeOther: serializeDecimal(row.incomeOther),
+  expenseMaterials: serializeDecimal(row.expenseMaterials),
+  expenseCar: serializeDecimal(row.expenseCar),
+  expenseRent: serializeDecimal(row.expenseRent),
+  expenseSalaries: serializeDecimal(row.expenseSalaries),
+  expenseOther: serializeDecimal(row.expenseOther),
+  expenseMarketing: serializeDecimal(row.expenseMarketing),
+  expenseHamburg: serializeDecimal(row.expenseHamburg),
+  expenseInsurance: serializeDecimal(row.expenseInsurance),
+  totalExpenses: serializeDecimal(row.totalExpenses),
+  closingBalance: serializeDecimal(row.closingBalance),
+});
+
 // GET /dashboard - Aggregate stats (optionally filtered by date)
 app.get('/dashboard', async (req: Request, res: Response) => {
   try {
@@ -213,6 +237,37 @@ app.get('/operations', async (req: Request, res: Response) => {
       },
     });
     res.json(operations);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /finance-daily-ledger - List finance ledger rows (optional filters)
+app.get('/finance-daily-ledger', async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate, accountId, limit } = req.query;
+    const where: Prisma.FinanceDailyLedgerWhereInput = {};
+
+    if (accountId && typeof accountId === 'string') {
+      where.accountId = accountId;
+    }
+
+    if (startDate || endDate) {
+      where.ledgerDate = {};
+      if (startDate) where.ledgerDate.gte = new Date(startDate as string);
+      if (endDate) where.ledgerDate.lte = new Date(endDate as string);
+    }
+
+    const take = typeof limit === 'string' ? Number(limit) : undefined;
+
+    const rows = await prisma.financeDailyLedger.findMany({
+      where,
+      orderBy: { ledgerDate: 'desc' },
+      take: Number.isFinite(take) ? take : undefined,
+    });
+
+    res.json(rows.map(serializeLedgerRow));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });

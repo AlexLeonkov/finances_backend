@@ -23,3 +23,27 @@ model Operation {
   projectType String? @map("project_type")
   createdAt DateTime @default(now())
 }
+
+model FinanceDailyLedger {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId        String   @default("main") @map("account_id")
+  ledgerDate       DateTime @db.Date @map("ledger_date")
+  openingBalance   Decimal? @map("opening_balance")
+  incomeInvoices   Decimal? @map("income_invoices")
+  incomeOther      Decimal? @map("income_other")
+  expenseMaterials Decimal? @map("expense_materials")
+  expenseCar       Decimal? @map("expense_car")
+  expenseRent      Decimal? @map("expense_rent")
+  expenseSalaries  Decimal? @map("expense_salaries")
+  expenseOther     Decimal? @map("expense_other")
+  expenseMarketing Decimal? @map("expense_marketing")
+  expenseHamburg   Decimal? @map("expense_hamburg")
+  expenseInsurance Decimal? @map("expense_insurance")
+  totalExpenses    Decimal? @map("total_expenses")
+  closingBalance   Decimal? @map("closing_balance")
+  source           String?
+  sourceRowId      String?  @map("source_row_id")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("finance_daily_ledger")
+}
