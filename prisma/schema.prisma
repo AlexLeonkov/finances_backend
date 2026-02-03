@@ -47,3 +47,14 @@ model FinanceDailyLedger {
 
   @@map("finance_daily_ledger")
 }
+
+model Material {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  price     Decimal
+  unit      String
+  unitType  String   @map("unit_type")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("materials")
+}

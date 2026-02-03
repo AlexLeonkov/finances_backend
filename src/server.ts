@@ -35,6 +35,11 @@ const serializeLedgerRow = (row: any) => ({
   closingBalance: serializeDecimal(row.closingBalance),
 });
 
+const serializeMaterialRow = (row: any) => ({
+  ...row,
+  price: serializeDecimal(row.price),
+});
+
 // GET /dashboard - Aggregate stats (optionally filtered by date)
 app.get('/dashboard', async (req: Request, res: Response) => {
   try {
@@ -268,6 +273,24 @@ app.get('/finance-daily-ledger', async (req: Request, res: Response) => {
     });
 
     res.json(rows.map(serializeLedgerRow));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /materials - List materials (optional limit)
+app.get('/materials', async (req: Request, res: Response) => {
+  try {
+    const { limit } = req.query;
+    const take = typeof limit === 'string' ? Number(limit) : undefined;
+
+    const materials = await prisma.material.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: Number.isFinite(take) ? take : undefined,
+    });
+
+    res.json(materials.map(serializeMaterialRow));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
